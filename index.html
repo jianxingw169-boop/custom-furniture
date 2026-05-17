@@ -1669,7 +1669,7 @@ const REC_SPACES = [
 // ─── Online reference image search (知末网) ──
 
 function refImgUrl(q) {
-  return `https://www.znzmo.com`;
+  return `https://www.znzmo.com/general.html?keyword=${encodeURIComponent(q)}&st=-5`;
 }
 
 function aiPrompt(spaceId, styleName, planLabel, layout) {
@@ -2029,7 +2029,7 @@ function renderStyledResults() {
         <span>📐 ${plan.layout}</span>
         <span>🪵 ${plan.panel}</span>
       </div>
-      <div class="plan-images">${[1].map(i => `<img src="${aiImgUrl(aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout), Math.random()*9999)}" alt="${plan.label}参考图" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="this.style.display='none'">`).join('')}<a class="img-tag" href="${refImgUrl((s?s.name+' ':'')+'参考图')}" target="_blank" rel="noopener">📷 搜参考图</a></div>
+      <div class="plan-images">${[1].map(i => `<img src="${aiImgUrl(aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout), Math.random()*9999)}" alt="${plan.label}参考图" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="this.style.display='none'">`).join('')}<a class="img-tag" href="${refImgUrl((s?s.name+' ':'')+'参考图')}" target="_blank">📷 搜参考图</a></div>
       <div class="rec-plan-features">
         ${(plan.cabinets||[]).slice(0,2).map(c => `<span class="rec-plan-feat">${c}</span>`).join('')}
       </div>
@@ -2041,7 +2041,7 @@ function renderStyledResults() {
   });
 
   const sn = REC_SPACES.find(sp=>sp.id===recSpace)?.name||'';
-  html += `<a class="btn btn-sm btn-secondary" href="${refImgUrl(sn+' '+(s?s.name:'')+' 全屋定制 设计')}" target="_blank" rel="noopener" style="width:100%;margin-top:8px;text-align:center;text-decoration:none">🔍 在线搜参考图</a>`;
+  html += `<a class="btn btn-sm btn-secondary" href="${refImgUrl(sn+' '+(s?s.name:'')+' 全屋定制 设计')}" target="_blank" style="width:100%;margin-top:8px;text-align:center;text-decoration:none">🔍 在线搜参考图</a>`;
   el.innerHTML = html;
 }
 
@@ -2063,8 +2063,8 @@ function showStyledDetail(pi) {
     ${s ? `<div style="margin:0 0 8px">${genColorBar(s.colors, s.colorNames)}</div>` : ''}
     <div class="modal-section">
       <h4>🎨 AI 生成参考图</h4>
-      <div class="plan-images">${[1,2].map(i => `<img src="${aiImgUrl(aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout), Math.random()*9999)}" alt="${plan.label}参考图" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="this.style.display='none'">`).join('')}<a class="img-tag" href="${refImgUrl((s?s.name+' ':'')+'参考图')}" target="_blank" rel="noopener">📷 搜参考图</a></div>
-      <a class="btn btn-sm btn-secondary" href="${refImgUrl(spaceLabel+' '+(s?s.name:'')+' 全屋定制')}" target="_blank" rel="noopener" style="margin-top:4px;font-size:11px;text-decoration:none">🔍 知末搜更多参考图</a>
+      <div class="plan-images">${[1,2].map(i => `<img src="${aiImgUrl(aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout), Math.random()*9999)}" alt="${plan.label}参考图" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="this.style.display='none'">`).join('')}<a class="img-tag" href="${refImgUrl((s?s.name+' ':'')+'参考图')}" target="_blank">📷 搜参考图</a></div>
+      <a class="btn btn-sm btn-secondary" href="${refImgUrl(spaceLabel+' '+(s?s.name:'')+' 全屋定制')}" target="_blank" style="margin-top:4px;font-size:11px;text-decoration:none">🔍 知末搜更多参考图</a>
     </div>
     <div class="modal-section">
       <h4>📐 布局方案</h4><p>${plan.layout}</p>
