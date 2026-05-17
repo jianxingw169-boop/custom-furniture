@@ -1967,17 +1967,11 @@ const REC_SPACES = [
 // ─── Online reference image search ──
 const REF_SOURCES = { znzmo:{ label:'知末网', url:(q)=>`https://www.znzmo.com/general.html?keyword=${encodeURIComponent(q)}&st=-5` }, xiaohongshu:{ label:'小红书', url:(q)=>`https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(q)}` } };
 
-function refImgUrl() { return 'https://www.znzmo.com'; }
-function openRefSearch(e, q) {
-  const src = REF_SOURCES[refSource] || REF_SOURCES.znzmo;
-  const url = src.url(q);
-  // Pre-warm znzmo session cookie
-  if (refSource === 'znzmo') {
-    fetch('https://www.znzmo.com', { mode: 'no-cors' }).catch(() => {});
-  }
-  // Update href & let target="_blank" open in system browser
-  if (e && e.currentTarget) e.currentTarget.href = url;
-  else window.open(url, '_blank');
+function refSearchUrl(q) {
+  return (REF_SOURCES[refSource] || REF_SOURCES.znzmo).url(q);
+}
+function warmZnzmo() {
+  fetch('https://www.znzmo.com', { mode: 'no-cors' }).catch(() => {});
 }
 
 function aiPrompt(spaceId, styleName, planLabel, layout) {
@@ -2660,7 +2654,7 @@ function renderStyledResults() {
         <span>📐 ${plan.layout}</span>
         <span>🪵 ${plan.panel}</span>
       </div>
-      <div class="plan-images">${(()=>{const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;})()}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
+      <div class="plan-images">${(()=>{const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;})()}<a class="img-tag" href="${refSearchUrl((s?s.name+' ':'')+'参考图')}" onclick="warmZnzmo()" target="_blank">📷 搜参考图</a></div>
       <div class="rec-plan-features">
         ${(plan.cabinets||[]).slice(0,2).map(c => `<span class="rec-plan-feat">${c}</span>`).join('')}
       </div>
@@ -2673,7 +2667,7 @@ function renderStyledResults() {
 
   const sn = REC_SPACES.find(sp=>sp.id===recSpace)?.name||'';
   const srcLabel = (REF_SOURCES[refSource]||{}).label||'知末网';
-  html += `<a class="btn btn-sm btn-secondary" href="${refImgUrl()}" onclick="openRefSearch(event,sn+' '+(s?s.name:'')+' 全屋定制 设计')" target="_blank" style="width:100%;margin-top:8px;text-align:center;text-decoration:none">🔍 ${srcLabel}搜参考图</a>`;
+  html += `<a class="btn btn-sm btn-secondary" href="${refSearchUrl(sn+' '+(s?s.name:'')+' 全屋定制 设计')}" onclick="warmZnzmo()" target="_blank" style="width:100%;margin-top:8px;text-align:center;text-decoration:none">🔍 ${srcLabel}搜参考图</a>`;
   el.innerHTML = html;
   setTimeout(bgLoadPlanImages, 100);
 }
@@ -2697,8 +2691,8 @@ function showStyledDetail(pi) {
     ${s ? `<div style="margin:0 0 8px">${genColorBar(s.colors, s.colorNames)}</div>` : ''}
     <div class="modal-section">
       <h4>🎨 AI 生成参考图</h4>
-      <div class="plan-images">${[1,2].map(i => { const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;}).join('')}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
-      <a class="btn btn-sm btn-secondary" href="${refImgUrl()}" onclick="openRefSearch(event,spaceLabel+' '+(s?s.name:'')+' 全屋定制')" target="_blank" style="margin-top:4px;font-size:11px;text-decoration:none">🔍 ${srcLabel}搜更多参考图</a>
+      <div class="plan-images">${[1,2].map(i => { const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;}).join('')}<a class="img-tag" href="${refSearchUrl((s?s.name+' ':'')+'参考图')}" onclick="warmZnzmo()" target="_blank">📷 搜参考图</a></div>
+      <a class="btn btn-sm btn-secondary" href="${refSearchUrl(spaceLabel+' '+(s?s.name:'')+' 全屋定制')}" onclick="warmZnzmo()" target="_blank" style="margin-top:4px;font-size:11px;text-decoration:none">🔍 ${srcLabel}搜更多参考图</a>
     </div>
     <div class="modal-section">
       <h4>📐 布局方案</h4><p>${plan.layout}</p>
