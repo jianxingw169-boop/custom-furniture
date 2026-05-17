@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>全屋定制助手</title>
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#2d1810">
 <meta name="apple-mobile-web-app-title" content="定制助手">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -730,7 +730,8 @@ const WF_STEPS = [
 let activeTab = 'dimensions';
 let dimSubTab = 'kitchen';
 let matSubTab = 'panel';
-let wfStep = 0;
+let wfStep = parseInt(localStorage.getItem('ff_wfStep') || '0');
+function setWFStep(v) { wfStep = v; localStorage.setItem('ff_wfStep', wfStep); }
 let searchTerm = '';
 let favs = new Set();
 let measurements = [];
@@ -901,7 +902,7 @@ function renderDim() {
           ${item.note ? `<div class="card-note">${item.note}</div>` : ''}
           <div class="dim-bar"><div class="dim-bar-fill" style="width:${getDimPercent(item.dim)}%"></div></div>
         </div>
-        <button class="card-star${isFav?' active':''}" onclick="event.stopPropagation();toggleFav('${item.id}')">${isFav?'★':'☆'}</button>
+        <button class="card-star${isFav?' active':''}" data-id="${item.id}" onclick="event.stopPropagation();toggleFav('${item.id}')">${isFav?'★':'☆'}</button>
       </div>
     </div>`;
   });
@@ -911,7 +912,9 @@ function renderDim() {
 
 function toggleFav(id) {
   if (favs.has(id)) favs.delete(id); else favs.add(id);
-  saveFavs(); renderDim();
+  saveFavs();
+  const star = document.querySelector(`.card-star[data-id="${id}"]`);
+  if (star) { star.classList.toggle('active'); star.textContent = favs.has(id) ? '★' : '☆'; }
 }
 
 // ═══════════════════════════════════════════
@@ -1013,10 +1016,14 @@ function showDimDetail(id) {
     <div style="margin-top:12px"><button class="btn btn-sm ${isFav?'btn-secondary':'btn-primary'}" onclick="toggleFav('${item.id}');hideModal();setTimeout(()=>showDimDetail('${item.id}'),100)" style="width:100%">${isFav?'⭐ 已收藏':'☆ 收藏此尺寸'}</button></div>`);
 }
 
-// Search
+// Search (with debounce)
+let searchDebounce;
 document.getElementById('searchInput').addEventListener('input', () => {
-  searchTerm = document.getElementById('searchInput').value.trim();
-  if (activeTab === 'dimensions') renderDim();
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    searchTerm = document.getElementById('searchInput').value.trim();
+    if (activeTab === 'dimensions') renderDim();
+  }, 150);
 });
 
 // ═══════════════════════════════════════════
@@ -1071,7 +1078,7 @@ function saveCustomDim(idx) {
   } else {
     customDims.push({ id:'c_'+(customDimId++), cat, name, dim, note, tip:'' });
   }
-  saveCustomDims(); hideModal(); dimSubTab='custom'; renderDim(); toast('已保存');
+  saveCustomDims(); hideModal(); dimSubTab='custom'; renderDim(); setTimeout(()=>toast('已保存'),300);
 }
 
 // ═══════════════════════════════════════════
@@ -1093,14 +1100,17 @@ function renderSpaceEstimator() {
         </select>
       </div>
       <div class="space-input-row">
-        <div class="space-input-group"><label>长 (mm)</label><input type="number" id="spaceLength" placeholder="e.g. 4000" oninput="calcSpace()"></div>
-        <div class="space-input-group"><label>宽 (mm)</label><input type="number" id="spaceWidth" placeholder="e.g. 3300" oninput="calcSpace()"></div>
-        <div class="space-input-group"><label>高 (mm)</label><input type="number" id="spaceHeight" placeholder="e.g. 2700" oninput="calcSpace()"></div>
+        <div class="space-input-group"><label>长 (mm)</label><input type="number" id="spaceLength" placeholder="e.g. 4000" min="100" max="50000" oninput="debounceCalcSpace()"></div>
+        <div class="space-input-group"><label>宽 (mm)</label><input type="number" id="spaceWidth" placeholder="e.g. 3300" min="100" max="50000" oninput="debounceCalcSpace()"></div>
+        <div class="space-input-group"><label>高 (mm)</label><input type="number" id="spaceHeight" placeholder="e.g. 2700" min="100" max="50000" oninput="debounceCalcSpace()"></div>
       </div>
     </div>
     <div id="spaceResults"></div>
   </div>`;
 }
+
+let calcSpaceDebounce;
+function debounceCalcSpace() { clearTimeout(calcSpaceDebounce); calcSpaceDebounce = setTimeout(calcSpace, 200); }
 
 function calcSpace() {
   const l = parseInt(document.getElementById('spaceLength').value) || 0;
@@ -1517,7 +1527,7 @@ function calcQuote() {
     customerId: document.getElementById('q_customer').value || ''
   };
 
-  quotes.push(qResult);
+  quotes.push(qResult); if (quotes.length > 100) quotes = quotes.slice(-100);
   saveQuotes();
   renderQuote();
 }
@@ -1581,7 +1591,7 @@ function renderWF() {
   html += `<div class="wf-steps"><div class="wf-steps-line"><div class="wf-steps-line-fill" style="width:${doneSteps/wf.steps.length*100}%"></div></div>`;
   WF_STEPS.forEach((s, i) => {
     const cls = wf.steps[i].done ? 'done' : (i === wfStep ? 'current' : '');
-    html += `<div class="wf-step ${cls}" onclick="wfStep=${i};renderWF()">
+    html += `<div class="wf-step ${cls}" onclick="setWFStep(${i});renderWF()">
       <div class="wf-step-dot">${wf.steps[i].done?'✓':s.icon}</div>
       <div class="wf-step-label">${s.label}</div>
     </div>`;
@@ -1642,7 +1652,7 @@ function completeStep(si) {
   const wf = getWF();
   wf.steps[si].done = true;
   saveWF();
-  if (si < WF_STEPS.length - 1) wfStep = si + 1;
+  if (si < WF_STEPS.length - 1) setWFStep(si + 1);
   renderWF();
 }
 function undoStep(si) {
@@ -2141,38 +2151,38 @@ setTimeout(() => { tryRealRefImg = _patchedTryRealRefImg; }, 3000);
 
 const PROXY_IMG_KEY = 'ff_uploadedImgs';
 
+// ─── Shared AI image loader: 4-level proxy chain + Unsplash fallback ──
+function tryLoadAIImage(prompt, space, onSuccess, onFallback) {
+  const tryLevel = (lvl) => {
+    let src;
+    const p = encodeURIComponent(prompt);
+    if (lvl === 1) src = `https://image.pollinations.ai/prompt/${p}?width=400&height=300&model=turbo&nologo=true&seed=${Date.now()}`;
+    else if (lvl === 2) src = `https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
+    else if (lvl === 3) src = `https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
+    else if (lvl === 4) src = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://pollinations.ai/p/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
+    else { tryRealRefImg(space, onFallback); return; }
+    const test = new Image();
+    if (lvl >= 3) test.crossOrigin = 'anonymous';
+    test.onload = () => onSuccess(src);
+    test.onerror = () => tryLevel(lvl + 1);
+    test.src = src;
+  };
+  tryLevel(1);
+}
+
 // ─── Background AI image loader ──
-// Strategy: show canvas card immediately, then try to upgrade to AI/real images
 function bgLoadPlanImages() {
   document.querySelectorAll('.plan-images img[data-prompt]').forEach(el => {
     const prompt = el.dataset.prompt;
     if (!prompt) return;
-    if (el.dataset.bgLoaded) return; // already tried
+    if (el.dataset.bgLoaded) return;
     el.dataset.bgLoaded = '1';
     el.classList.add('img-loading');
     const space = el.dataset.space || '';
-    const style = el.dataset.style || '';
-
-    // Level 1-4: try pollinations.ai via different methods
-    const tryAI = (lvl) => {
-      let src;
-      const p = encodeURIComponent(prompt);
-      if (lvl === 1) src = `https://image.pollinations.ai/prompt/${p}?width=400&height=300&model=turbo&nologo=true&seed=${Date.now()}`;
-      else if (lvl === 2) src = `https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
-      else if (lvl === 3) src = `https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
-      else if (lvl === 4) src = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://pollinations.ai/p/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
-      else {
-        // AI all failed, try Unsplash real photo
-        tryRealRefImg(space, dataURL => { el.classList.remove('img-loading'); if (dataURL) el.src = dataURL; });
-        return;
-      }
-      const test = new Image();
-      if (lvl >= 3) test.crossOrigin = 'anonymous';
-      test.onload = () => { el.src = src; el.dataset.loaded = 'ai'; el.classList.remove('img-loading'); };
-      test.onerror = () => { tryAI(lvl + 1); };
-      test.src = src;
-    };
-    tryAI(1);
+    tryLoadAIImage(prompt, space,
+      src => { el.src = src; el.dataset.loaded = 'ai'; el.classList.remove('img-loading'); },
+      dataURL => { el.classList.remove('img-loading'); if (dataURL) el.src = dataURL; }
+    );
   });
 }
 
@@ -2196,20 +2206,10 @@ function imgError(el) {
     // Start background AI load
     if (el.dataset.prompt) {
       el.dataset.bgLoaded = '1';
-      const prompt = el.dataset.prompt;
-      const tryAI = (lvl) => {
-        let src; const p = encodeURIComponent(prompt);
-        if (lvl===1) src=`https://image.pollinations.ai/prompt/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
-        else if (lvl===2) src=`https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
-        else if (lvl===3) src=`https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
-        else { tryRealRefImg(space, d=>{el.classList.remove('img-loading');if(d)el.src=d;}); return; }
-        const test=new Image();
-        if(lvl>=3)test.crossOrigin='anonymous';
-        test.onload=()=>{el.src=src;el.dataset.loaded='ai';el.classList.remove('img-loading');};
-        test.onerror=()=>{tryAI(lvl+1);};
-        test.src=src;
-      };
-      tryAI(1);
+      tryLoadAIImage(el.dataset.prompt, space,
+        src => { el.src = src; el.dataset.loaded = 'ai'; el.classList.remove('img-loading'); },
+        dataURL => { el.classList.remove('img-loading'); if (dataURL) el.src = dataURL; }
+      );
     }
     return;
   }
@@ -2787,8 +2787,8 @@ function saveBrandSettings() {
   brandSettings.wechat = document.getElementById('b_wechat').value;
   brandSettings.address = document.getElementById('b_addr').value;
   saveBrand();
-  toast('品牌设置已保存 ✅');
   hideModal();
+  setTimeout(() => toast('品牌设置已保存 ✅'), 300);
 }
 
 // ─── Customer Management ──
@@ -3255,7 +3255,7 @@ switchTab('dimensions');
 
 // Service worker registration
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js').catch(() => {});
 }
 
 </script>
