@@ -1985,128 +1985,212 @@ function aiPrompt(spaceId, styleName, planLabel, layout) {
   return `${sn} ${styleName}风格 定制家具 ${layout}布局 室内设计效果图 实景 高清`;
 }
 
-// ─── Canvas fallback: generate a visual card from prompt text ──
-function genFallbackCanvas(prompt) {
+// ─── Canvas reference card: rich visual from plan data ──
+function genRefCard(spaceId, styleName, planLabel, layout, colorArr, colorNames) {
   const W = 400, H = 300;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
+  const colors = colorArr && colorArr.length ? colorArr : ['#c47040','#e8c4a8','#fcefe6'];
 
-  // Background gradient
-  const grad = ctx.createLinearGradient(0,0,W,H);
-  grad.addColorStop(0,'#faf5f0'); grad.addColorStop(1,'#ede0d6');
+  // Background
+  const grad = ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0, colors[0] || '#c47040');
+  grad.addColorStop(1, colors[1] || '#e8c4a8');
   ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
 
-  // Draw furniture silhouette
-  ctx.fillStyle = 'rgba(196,112,64,0.12)';
-  // Top cabinet
-  ctx.fillRect(40, 40, 320, 60);
-  // Bottom cabinet (L-shape)
-  ctx.fillRect(40, 180, 220, 80);
-  ctx.fillRect(180, 140, 180, 80);
-  // Drawer lines
-  ctx.strokeStyle = 'rgba(196,112,64,0.2)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(40, 100); ctx.lineTo(360, 100);
-  ctx.moveTo(260, 180); ctx.moveTo(260, 220);
-  ctx.moveTo(40, 180); ctx.lineTo(260, 180);
-  ctx.stroke();
-
-  // Label background
-  ctx.fillStyle = 'rgba(45,24,16,0.85)';
-  // Manual roundRect for compatibility
-  const rx = 20, ry = 155, rw = 160, rh = 80, r = 8;
-  ctx.beginPath();
-  ctx.moveTo(rx+r, ry); ctx.lineTo(rx+rw-r, ry); ctx.quadraticCurveTo(rx+rw, ry, rx+rw, ry+r);
-  ctx.lineTo(rx+rw, ry+rh-r); ctx.quadraticCurveTo(rx+rw, ry+rh, rx+rw-r, ry+rh);
-  ctx.lineTo(rx+r, ry+rh); ctx.quadraticCurveTo(rx, ry+rh, rx, ry+rh-r);
-  ctx.lineTo(rx, ry+r); ctx.quadraticCurveTo(rx, ry, rx+r, ry);
+  // White card area
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath(); const m=15, r2=12;
+  ctx.moveTo(m+r2,m); ctx.lineTo(W-m-r2,m);
+  ctx.quadraticCurveTo(W-m,m,W-m,m+r2);
+  ctx.lineTo(W-m,H-m-r2);
+  ctx.quadraticCurveTo(W-m,H-m,W-m-r2,H-m);
+  ctx.lineTo(m+r2,H-m);
+  ctx.quadraticCurveTo(m,H-m,m,H-m-r2);
+  ctx.lineTo(m,m+r2);
+  ctx.quadraticCurveTo(m,m,m+r2,m);
   ctx.closePath(); ctx.fill();
 
-  // Extract info from prompt
-  const parts = prompt.split(' ');
-  const style = parts.find(p => STYLE_DB.some(s => p.includes(s.name))) || '定制家具';
-  const room = parts.find(p => REC_SPACES.some(s => p.includes(s.name))) || '';
-  const layout = parts.find(p => ['一字','L型','U型','二字','中岛'].some(l => p.includes(l))) || '';
+  // Layout diagram (top area)
+  const lw = 160, lh = 110, lx = 220, ly = 20;
+  ctx.fillStyle = '#f5f0eb';
+  ctx.fillRect(lx, ly, lw, lh);
+  ctx.strokeStyle = '#2d1810'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(lx, ly, lw, lh);
 
-  ctx.fillStyle = '#c47040'; ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(style, 32, 182);
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '12px sans-serif';
-  let y = 205;
-  if (room) { ctx.fillText('🏠 '+room, 32, y); y += 18; }
-  if (layout) ctx.fillText('📐 '+layout, 32, y);
+  // Simplified layout shapes
+  const isL = layout.includes('L'); const isU = layout.includes('U');
+  const isLine = layout.includes('一字'); const isIsland = layout.includes('中岛');
+  const cd = 24;
+  ctx.fillStyle = 'rgba(196,112,64,0.3)';
+  if (isL) {
+    ctx.fillRect(lx, ly+lh-cd, lw, cd);
+    ctx.fillRect(lx+lw-cd, ly, cd, lh);
+  } else if (isU) {
+    ctx.fillRect(lx, ly+lh-cd, lw, cd);
+    ctx.fillRect(lx, ly, cd, lh);
+    ctx.fillRect(lx+lw-cd, ly, cd, lh-cd/2);
+  } else if (isIsland) {
+    ctx.fillRect(lx, ly+10, lw, cd);
+    ctx.fillRect(lx, ly+lh-cd-10, lw, cd);
+    ctx.fillRect(lx+lw/2-15, ly+lh/2-8, 30, 16);
+  } else {
+    ctx.fillRect(lx+10, ly+lh-cd, lw-20, cd);
+    ctx.fillRect(lx+10, ly+10, lw-20, cd*0.6);
+  }
+  ctx.strokeStyle = '#c47040'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(lx, ly, lw, lh);
 
-  // Corner deco
-  ctx.fillStyle = 'rgba(196,112,64,0.08)';
-  ctx.beginPath(); ctx.moveTo(W-60,0); ctx.lineTo(W,0); ctx.lineTo(W,60); ctx.closePath(); ctx.fill();
+  // Label: plan name
+  ctx.fillStyle = '#2d1810';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(planLabel, 25, 42);
 
-  return c.toDataURL('image/jpeg', 0.8);
+  // Style + Room
+  ctx.fillStyle = '#8b7355';
+  ctx.font = '12px sans-serif';
+  ctx.fillText([styleName, spaceId].filter(Boolean).join(' · '), 25, 62);
+
+  // Color swatches
+  const swY = 75, swSize = 20, swGap = 6;
+  (colors||[]).slice(0,6).forEach((clr, i) => {
+    ctx.fillStyle = clr;
+    const sx = 25 + i*(swSize+swGap);
+    ctx.fillRect(sx, swY, swSize, swSize);
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx, swY, swSize, swSize);
+    if (colorNames && colorNames[i]) {
+      ctx.fillStyle = '#999'; ctx.font = '8px sans-serif';
+      ctx.fillText(colorNames[i], sx, swY+swSize+11);
+    }
+  });
+
+  // Layout type tag
+  const tagY = 115;
+  ctx.fillStyle = '#c47040'; ctx.font = 'bold 11px sans-serif';
+  ctx.fillText('📐 ' + layout, 25, tagY);
+
+  // Divider
+  ctx.strokeStyle = '#f0e6de'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(25, 132); ctx.lineTo(W-25, 132); ctx.stroke();
+
+  // Bottom: room info + "reference card" label
+  const spaceName = REC_SPACES.find(s=>s.id===spaceId)?.name||'';
+  ctx.fillStyle = '#bbb'; ctx.font = '10px sans-serif';
+  ctx.fillText('全屋定制助手 · 设计参考' + (spaceName?' · '+spaceName:''), 25, H-18);
+
+  // Corner mark
+  ctx.fillStyle = 'rgba(196,112,64,0.06)';
+  ctx.beginPath(); ctx.moveTo(W-35, 0); ctx.lineTo(W, 0); ctx.lineTo(W, 35); ctx.closePath(); ctx.fill();
+
+  return c.toDataURL('image/jpeg', 0.85);
 }
 
-const PROXY_URLS = [
-  'https://corsproxy.io/?url=',
-  'https://api.allorigins.win/raw?url=',
-];
-const PROXY_IMG_KEY = 'ff_uploadedImgs'; // {planPromptHash: dataURL}
-
-function aiImgUrl(prompt, seed, alt) {
-  const p = encodeURIComponent(prompt);
-  const s = seed || Math.floor(Math.random()*9999);
-  return alt
-    ? `https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${s}`
-    : `https://image.pollinations.ai/prompt/${p}?width=400&height=300&model=turbo&nologo=true&seed=${s}`;
+// ─── Try loading real images from Chinese-accessible CDN ──
+function tryRealRefImg(roomType, callback) {
+  // Attempt to load from Unsplash (accessible in China via CDN)
+  const unsplashIds = {
+    kitchen: '1556909114-f6e7ad7d3136',
+    bedroom: '1616594039964-ae9021a400a0',
+    living: '1586023492125-27b2c045efd7',
+    study: '1593061956140-5c1fc8e8c4c0',
+    entry: '1558618666-fcd25c85f82e',
+    closet: '1597006335770-25b6a72cb883',
+    tatami: '1516458226156-cda4264f2ef2',
+    bathroom: '1584622650111-993b4266e7a2',
+    whole: '1558618666-fcd25c85f82e',
+  };
+  const id = unsplashIds[roomType] || unsplashIds.kitchen;
+  const url = `https://images.unsplash.com/photo-${id}?w=400&h=300&fit=crop&auto=format`;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    // Compress to data URL to avoid CORS issues on re-display
+    const c = document.createElement('canvas');
+    c.width = 400; c.height = 300;
+    c.getContext('2d').drawImage(img, 0, 0, 400, 300);
+    callback(c.toDataURL('image/jpeg', 0.8));
+  };
+  img.onerror = () => callback(null);
+  img.src = url;
+  // Timeout after 5s
+  setTimeout(() => { if (!img.complete) { img.src = ''; callback(null); } }, 5000);
 }
 
+const PROXY_IMG_KEY = 'ff_uploadedImgs';
+
+// ─── Background AI image loader ──
+// Strategy: show canvas card immediately, then try to upgrade to AI/real images
+function bgLoadPlanImages() {
+  document.querySelectorAll('.plan-images img[data-prompt]').forEach(el => {
+    const prompt = el.dataset.prompt;
+    if (!prompt) return;
+    if (el.dataset.bgLoaded) return; // already tried
+    el.dataset.bgLoaded = '1';
+    const space = el.dataset.space || '';
+    const style = el.dataset.style || '';
+
+    // Level 1-4: try pollinations.ai via different methods
+    const tryAI = (lvl) => {
+      let src;
+      const p = encodeURIComponent(prompt);
+      if (lvl === 1) src = `https://image.pollinations.ai/prompt/${p}?width=400&height=300&model=turbo&nologo=true&seed=${Date.now()}`;
+      else if (lvl === 2) src = `https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
+      else if (lvl === 3) src = `https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
+      else if (lvl === 4) src = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://pollinations.ai/p/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
+      else {
+        // AI all failed, try Unsplash real photo
+        tryRealRefImg(space, dataURL => { if (dataURL) el.src = dataURL; });
+        return;
+      }
+      const test = new Image();
+      if (lvl >= 3) test.crossOrigin = 'anonymous';
+      test.onload = () => { el.src = src; el.dataset.loaded = 'ai'; };
+      test.onerror = () => { tryAI(lvl + 1); };
+      test.src = src;
+    };
+    tryAI(1);
+  });
+}
+
+// imgError is kept as safety net but should rarely fire now
 function imgError(el) {
   const lvl = (parseInt(el.dataset.err)||0) + 1;
   el.dataset.err = lvl;
-  const p = el.getAttribute('data-prompt') || '';
-  const q = encodeURIComponent(p);
-
+  // On first failure: show canvas card immediately
   if (lvl === 1) {
-    // Retry: fallback URL format (pollinations.ai/p/...)
-    el.src = aiImgUrl(p, Date.now(), true);
+    const space = el.dataset.space || recSpace || '';
+    const style = el.dataset.style || '';
+    const label = el.dataset.plan || '';
+    const layout = el.dataset.layout || '';
+    let colors = [], cnames = [];
+    try { if (el.dataset.colors) colors = JSON.parse(el.dataset.colors); } catch(e) {}
+    try { if (el.dataset.cnames) cnames = JSON.parse(el.dataset.cnames); } catch(e) {}
+    el.src = genRefCard(space, style, label, layout, colors, cnames);
+    el.style.cssText = 'width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer';
+    el.onclick = function(){showImg(this.src)};
+    // Start background AI load
+    if (el.dataset.prompt) {
+      el.dataset.bgLoaded = '1';
+      const prompt = el.dataset.prompt;
+      const tryAI = (lvl) => {
+        let src; const p = encodeURIComponent(prompt);
+        if (lvl===1) src=`https://image.pollinations.ai/prompt/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
+        else if (lvl===2) src=`https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
+        else if (lvl===3) src=`https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
+        else { tryRealRefImg(space, d=>{if(d)el.src=d;}); return; }
+        const test=new Image();
+        if(lvl>=3)test.crossOrigin='anonymous';
+        test.onload=()=>{el.src=src;el.dataset.loaded='ai';};
+        test.onerror=()=>{tryAI(lvl+1);};
+        test.src=src;
+      };
+      tryAI(1);
+    }
     return;
   }
-  if (lvl === 2 && PROXY_URLS[0]) {
-    // Retry: corsproxy.io wraps primary URL
-    el.src = PROXY_URLS[0] + encodeURIComponent(aiImgUrl(p, Date.now(), false));
-    // reset crossOrigin for proxy-loaded image
-    el.crossOrigin = 'anonymous';
-    return;
-  }
-  if (lvl === 3 && PROXY_URLS[1]) {
-    // Retry: allorigins.win wraps fallback URL
-    el.src = PROXY_URLS[1] + encodeURIComponent(aiImgUrl(p, Date.now(), true));
-    el.crossOrigin = 'anonymous';
-    return;
-  }
-  if (lvl === 4) {
-    // One more try: different seed through corsproxy
-    el.src = PROXY_URLS[0] + encodeURIComponent('https://image.pollinations.ai/prompt/'+q+'?width=400&height=300&nologo=true&seed='+Date.now());
-    el.crossOrigin = 'anonymous';
-    return;
-  }
-
-  // All attempts failed - show enhanced fallback with canvas visual + upload option
-  const hash = el.getAttribute('data-uhash') || p.slice(0,32).replace(/[^a-zA-Z0-9一-鿿]/g,'') || 'ref';
-  const uploaded = getUploadedImg(hash);
-  if (uploaded) {
-    el.outerHTML = `<img src="${uploaded}" alt="已上传参考图" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)">`;
-    return;
-  }
-  const canvasDataURL = genFallbackCanvas(p);
-  el.outerHTML = `<div style="position:relative;flex-shrink:0;width:120px;height:90px;border-radius:6px;overflow:hidden;cursor:pointer" onclick="showImg('${canvasDataURL}')">
-    <img src="${canvasDataURL}" alt="示意图" style="width:100%;height:100%;object-fit:cover">
-    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.5);padding:2px 6px;font-size:9px;color:#fff;display:flex;gap:4px;align-items:center">
-      <span>💡 参考</span>
-      <button class="btn btn-sm" style="margin-left:auto;font-size:8px;padding:0 6px;height:18px;background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:4px" onclick="event.stopPropagation();uploadPlanImg('${hash}')">📁 传图</button>
-    </div></div>
-    <div style="display:flex;gap:4px;flex-shrink:0;align-items:center">
-      <a class="img-tag" style="font-size:10px;padding:2px 8px" href="https://www.znzmo.com/general.html?keyword=${q}&st=-5" target="_blank">知末网</a>
-      <a class="img-tag" style="font-size:10px;padding:2px 8px" href="https://www.xiaohongshu.com/search_result?keyword=${q}" target="_blank">小红书</a>
-      <button class="img-tag" style="font-size:10px;padding:2px 8px;border:none" onclick="pasteImgUrl('${hash}')">🔗 贴链接</button>
-      <button class="img-tag" style="font-size:10px;padding:2px 8px;border:none" onclick="retryAIimg(this,'${q}')">🔄 重试</button>
-    </div>`;
+  // If AI retries in progress fail, canvas card is already showing, nothing to do
 }
 
 // ─── Uploaded Plan Images ──
@@ -2164,54 +2248,6 @@ function uploadPlanImg(hash) {
     reader.readAsDataURL(file);
   };
   inp.click();
-}
-function pasteImgUrl(hash) {
-  const url = prompt('输入图片链接（URL）：');
-  if (!url) return;
-  // Cross-origin image: fetch and convert to data URL
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = function() {
-    const c = document.createElement('canvas');
-    const MAX = 400;
-    let w = img.width, h = img.height;
-    if (w > MAX) { h = h * MAX / w; w = MAX; }
-    if (h > MAX) { w = w * MAX / h; h = MAX; }
-    c.width = w; c.height = h;
-    c.getContext('2d').drawImage(img, 0, 0, w, h);
-    const dataURL = c.toDataURL('image/jpeg', 0.7);
-    saveUploadedImg(hash, dataURL);
-    toast('已保存 ✅');
-    const imgs = document.querySelectorAll('.img-placeholder');
-    imgs.forEach(pl => {
-      if (pl.innerHTML.includes(hash)) {
-        pl.outerHTML = `<img src="${dataURL}" alt="已上传参考图" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)">`;
-      }
-    });
-  };
-  img.onerror = function() { toast('图片加载失败，请检查链接'); };
-  img.src = url;
-}
-function retryAIimg(btn, prompt) {
-  const planImages = btn.closest('.plan-images');
-  if (!planImages) return;
-  const origPrompt = decodeURIComponent(prompt);
-  const img = document.createElement('img');
-  img.src = aiImgUrl(origPrompt, Date.now(), false);
-  img.alt = '参考图';
-  img.dataset.prompt = origPrompt;
-  img.loading = 'lazy';
-  img.style.cssText = 'width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer';
-  img.onclick = function() { showImg(this.src); };
-  img.onerror = function() { imgError(this); };
-  // Remove the canvas fallback (the position:relative div)
-  const canvasFallback = planImages.querySelector('div[style*="position:relative"]');
-  if (canvasFallback) canvasFallback.remove();
-  // Insert new img before the button row
-  const btnRow = btn.closest('div') || btn.parentElement;
-  planImages.insertBefore(img, btnRow);
-  btn.textContent = '重试中...';
-  setTimeout(() => btn.remove(), 2000);
 }
 
 const SPACE_DIMS = { kitchen:{w:3,l:2}, bedroom:{w:4,l:3.5}, living:{w:5,l:4}, entry:{w:1.8,l:1.5}, study:{w:3,l:2.8}, closet:{w:2.5,l:2}, whole:{w:8,l:6} };
@@ -2624,7 +2660,7 @@ function renderStyledResults() {
         <span>📐 ${plan.layout}</span>
         <span>🪵 ${plan.panel}</span>
       </div>
-      <div class="plan-images">${(()=>{const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const uh=pp.slice(0,32).replace(/[^a-zA-Z0-9一-鿿]/g,'')||'ref'; const up=getUploadedImg(uh); return up?`<img src="${up}" alt="参考图" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)">`:`<img src="${aiImgUrl(pp, Math.random()*9999)}" alt="${plan.label}参考图" data-prompt="${pp}" data-uhash="${uh}" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="imgError(this)">`;})()}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
+      <div class="plan-images">${(()=>{const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;})()}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
       <div class="rec-plan-features">
         ${(plan.cabinets||[]).slice(0,2).map(c => `<span class="rec-plan-feat">${c}</span>`).join('')}
       </div>
@@ -2639,6 +2675,7 @@ function renderStyledResults() {
   const srcLabel = (REF_SOURCES[refSource]||{}).label||'知末网';
   html += `<a class="btn btn-sm btn-secondary" href="${refImgUrl()}" onclick="openRefSearch(event,sn+' '+(s?s.name:'')+' 全屋定制 设计')" target="_blank" style="width:100%;margin-top:8px;text-align:center;text-decoration:none">🔍 ${srcLabel}搜参考图</a>`;
   el.innerHTML = html;
+  setTimeout(bgLoadPlanImages, 100);
 }
 
 function showStyledDetail(pi) {
@@ -2660,7 +2697,7 @@ function showStyledDetail(pi) {
     ${s ? `<div style="margin:0 0 8px">${genColorBar(s.colors, s.colorNames)}</div>` : ''}
     <div class="modal-section">
       <h4>🎨 AI 生成参考图</h4>
-      <div class="plan-images">${[1,2].map(i => { const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const uh=pp.slice(0,32).replace(/[^a-zA-Z0-9一-鿿]/g,'')||'ref'; const up=getUploadedImg(uh); return up?`<img src="${up}" alt="参考图" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)">`:`<img src="${aiImgUrl(pp, Math.random()*9999)}" alt="${plan.label}参考图" data-prompt="${pp}" data-uhash="${uh}" loading="lazy" onclick="event.stopPropagation();showImg(this.src)" onerror="imgError(this)">`;}).join('')}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
+      <div class="plan-images">${[1,2].map(i => { const pp=aiPrompt(recSpace, s?s.name:'', plan.label, plan.layout); const card=genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames); return `<img src="${card}" alt="${plan.label}参考图" data-prompt="${pp}" data-space="${recSpace}" data-style="${s?.name||''}" data-plan="${plan.label}" data-layout="${plan.layout}" loading="lazy" style="width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer" onclick="showImg(this.src)" onerror="imgError(this)">`;}).join('')}<a class="img-tag" href="${refImgUrl()}" onclick="openRefSearch(event,(s?s.name+' ':'')+'参考图')" target="_blank">📷 搜参考图</a></div>
       <a class="btn btn-sm btn-secondary" href="${refImgUrl()}" onclick="openRefSearch(event,spaceLabel+' '+(s?s.name:'')+' 全屋定制')" target="_blank" style="margin-top:4px;font-size:11px;text-decoration:none">🔍 ${srcLabel}搜更多参考图</a>
     </div>
     <div class="modal-section">
@@ -2692,6 +2729,7 @@ function showStyledDetail(pi) {
   html += `<button class="btn btn-sm ${saved?'':'btn-primary'}" style="width:100%;margin-top:10px" onclick="toggleSavePlan(${pi});hideModal()">${saved?'✅ 已收藏':'💾 收藏此方案'}</button>`;
   html += `<button class="btn btn-sm btn-secondary" style="width:100%;margin-top:6px" onclick="hideModal();exportPlanCard(${pi})">📷 导出图片</button>`;
   showModal(html);
+  setTimeout(bgLoadPlanImages, 100);
 }
 
 function resetStyle() {
