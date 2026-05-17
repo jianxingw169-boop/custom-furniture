@@ -1,10 +1,12 @@
-const CACHE = 'ff-cache-v1';
+const CACHE = 'ff-cache-v2';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.svg',
-  '/icon-512.svg'
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon-192.svg',
+  './icon-512.svg'
 ];
 
 self.addEventListener('install', e => {
