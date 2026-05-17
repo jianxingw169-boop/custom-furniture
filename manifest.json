@@ -1,0 +1,14 @@
+{
+  "name": "全屋定制助手",
+  "short_name": "定制助手",
+  "description": "全屋定制设计师的现场工具 - 尺寸速查、量尺记录、报价速算",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf5f0",
+  "theme_color": "#2d1810",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml" }
+  ]
+}

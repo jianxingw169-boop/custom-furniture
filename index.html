@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>全屋定制助手</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#2d1810">
+<meta name="apple-mobile-web-app-title" content="定制助手">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=DM+Sans:opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
 <style>
@@ -20,7 +23,7 @@
   --shadow-md:0 4px 12px rgba(45,24,16,0.08);
   --shadow-lg:0 8px 32px rgba(45,24,16,0.12);
   --radius:14px;--radius-sm:10px;--radius-xs:6px;
-  --font-display:'Newsreader',Georgia,serif;--font-body:'DM Sans','PingFang SC','Microsoft YaHei',sans-serif;
+  --font-display:'Newsreader',Georgia,serif;--font-body:'DM Sans','PingFang SC','Microsoft YaHei','Hiragino Sans GB',sans-serif;
   --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
   --tab-h:56px;--header-h:56px;
 }
@@ -155,7 +158,11 @@ body{
   font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);z-index:200;
   opacity:0;pointer-events:none;transition:all .3s;white-space:nowrap;max-width:90vw;text-overflow:ellipsis;overflow:hidden;
 }
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-8px)}
+
+/* ── Page transition ── */
+.page-enter{animation:pageFadeIn .25s ease-out}
+@keyframes pageFadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── Empty state ── */
 .empty-state{text-align:center;padding:50px 20px 30px;}
@@ -705,6 +712,8 @@ let favs = new Set();
 let measurements = [];
 let quotes = [];
 let wfProjects = {};
+let brandSettings = { companyName:'', phone:'', wechat:'', address:'' };
+let customers = [];
 
 // Quote form state
 let qType = '';
@@ -712,6 +721,7 @@ let qW = 0, qH = 0, qD = 0;
 let qGrade = 'std';
 let qOpts = {};
 let qResult = null;
+let qCustId = '';
 
 function loadState() {
   try {
@@ -723,12 +733,18 @@ function loadState() {
     if (q) quotes = JSON.parse(q);
     const w = localStorage.getItem('ff_wf');
     if (w) wfProjects = JSON.parse(w);
+    const b = localStorage.getItem('ff_brand');
+    if (b) brandSettings = JSON.parse(b);
+    const c = localStorage.getItem('ff_customers');
+    if (c) customers = JSON.parse(c);
   } catch(e) {}
 }
 function saveFavs() { localStorage.setItem('ff_favs', JSON.stringify([...favs])); }
 function saveMeasure() { localStorage.setItem('ff_measure', JSON.stringify(measurements)); }
 function saveQuotes() { localStorage.setItem('ff_quotes', JSON.stringify(quotes)); }
 function saveWF() { localStorage.setItem('ff_wf', JSON.stringify(wfProjects)); }
+function saveBrand() { localStorage.setItem('ff_brand', JSON.stringify(brandSettings)); }
+function saveCustomers() { localStorage.setItem('ff_customers', JSON.stringify(customers)); }
 
 // ═══════════════════════════════════════════
 // 3. SHELL
@@ -736,8 +752,12 @@ function saveWF() { localStorage.setItem('ff_wf', JSON.stringify(wfProjects)); }
 
 function switchTab(tab) {
   activeTab = tab;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page_' + tab).classList.add('active');
+  document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.classList.remove('page-enter'); });
+  const pg = document.getElementById('page_' + tab);
+  pg.classList.add('active');
+  pg.classList.remove('page-enter');
+  void pg.offsetWidth; // force reflow
+  pg.classList.add('page-enter');
   document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
   document.querySelector(`.tab-item[data-tab="${tab}"]`).classList.add('active');
 
@@ -886,7 +906,7 @@ function renderMeasure() {
         <button class="rec-card-del" onclick="event.stopPropagation();delMeasure(${i})">✕</button>
       </div>
       <div class="rec-card-rooms">${rooms.map(r => `<span class="rec-room-tag">${r.name||'房间'}</span>`).join('')}</div>
-      <div style="font-size:12px;color:var(--text-muted)">${rooms.length} 个房间 · 共 ${rooms.reduce((s,r)=>s+Math.round((r.length||0)*(r.width||0)/1e6*10)/10,0).toFixed(1)} m²</div>
+      <div style="font-size:12px;color:var(--text-muted)">${rooms.length} 个房间 · 共 ${rooms.reduce((s,r)=>s+Math.round((r.length||0)*(r.width||0)/1e6*10)/10,0).toFixed(1)} m²${m.customerId?` · 👤 ${getCustomerName(m.customerId)}`:''}</div>
     </div>`;
   });
   el.innerHTML = html;
@@ -955,6 +975,11 @@ function showMeasureFormInner(m, rooms, isEdit, editIdx) {
       <input class="form-input" id="mf_project" value="${m.project||''}" placeholder="如：万科城3栋502"></div>
     <div class="form-group"><label class="form-label">日期</label>
       <input class="form-input" id="mf_date" value="${m.date||today()}"></div>
+    <div class="form-group"><label class="form-label">客户</label>
+      <select class="form-input" id="mf_customer">
+        <option value="">— 不关联客户 —</option>
+        ${customers.map(c => `<option value="${c.id}" ${m.customerId===c.id?'selected':''}>${c.name}${c.phone?' · '+c.phone:''}</option>`).join('')}
+      </select></div>
     <div id="mf_rooms">`;
   rooms.forEach((r, ri) => {
     html += `<div class="room-entry" data-ri="${ri}">
@@ -1016,7 +1041,8 @@ function saveMeasureForm(isEdit, editIdx) {
     project: document.getElementById('mf_project').value || '未命名项目',
     date: document.getElementById('mf_date').value || today(),
     rooms: rooms,
-    notes: document.getElementById('mf_notes').value || ''
+    notes: document.getElementById('mf_notes').value || '',
+    customerId: document.getElementById('mf_customer').value || ''
   };
 
   if (isEdit && editIdx !== undefined) {
@@ -1074,6 +1100,13 @@ function renderQuote() {
     });
     html += `</div></div>`;
 
+    // Customer selector
+    html += `<div class="form-group"><label class="form-label">客户</label>
+      <select class="form-input" id="q_customer" onchange="qCustId=this.value">
+        <option value="">— 不关联客户 —</option>
+        ${customers.map(c => `<option value="${c.id}" ${qCustId===c.id?'selected':''}>${c.name}${c.phone?' · '+c.phone:''}</option>`).join('')}
+      </select></div>`;
+
     // Options per type
     html += `<div class="form-group"><label class="form-label">可选配件</label>`;
     const opts = getOpts(qType);
@@ -1120,7 +1153,7 @@ function renderQuote() {
             <div><strong>${q.typeLabel}</strong> · ${q.gradeLabel} · ¥${fmtNum(q.total)}</div>
             <div style="font-size:11px;color:var(--text-muted)">${q.date||''}</div>
           </div>
-          <div style="font-size:12px;color:var(--text-muted)">${q.area} ${q.unit} · ${q.w}×${q.h}×${q.d}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${q.area} ${q.unit} × ${q.w}×${q.h}×${q.d}${q.customerId?` 👤 ${getCustomerName(q.customerId)}`:""}</div>
         </div>`;
       });
     }
@@ -1216,7 +1249,8 @@ function calcQuote() {
     items,
     total: Math.round(total),
     optsDesc: optsDesc.join('、'),
-    date: today()
+    date: today(),
+    customerId: document.getElementById('q_customer').value || ''
   };
 
   quotes.push(qResult);
@@ -1227,8 +1261,9 @@ function calcQuote() {
 function showQDetail(i) {
   const q = quotes[i];
   if (!q) return;
+  const c = q.customerId ? getCustomer(q.customerId) : null;
   let html = `<div class="modal-cat">💰 报价详情</div><div class="modal-title">${q.typeLabel} · ${q.gradeLabel}</div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${q.date||''}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${q.date||''}${c?` · 👤 ${c.name}${c.phone?' · '+c.phone:''}`:''}</div>
     <div class="modal-section"><h4>尺寸</h4><p>${q.w}×${q.h}×${q.d} mm · ${q.area} ${q.unit}</p></div>
     <div class="modal-section"><h4>单价</h4><p>¥${fmtNum(q.unitPrice)}/${q.unit}</p></div>`;
   (q.items||[]).forEach(item => {
@@ -1243,6 +1278,7 @@ function showQDetail(i) {
     <div class="total-number">¥${fmtNum(q.total)}<span class="unit">元</span></div>
   </div>`;
   if (q.optsDesc) html += `<div class="quote-meta" style="margin-top:6px">配件：${q.optsDesc}</div>`;
+  html += `<button class="btn btn-primary btn-block" onclick="exportQuoteImage(${i})" style="margin-top:12px">📷 导出图片</button>`;
   showModal(html);
 }
 
@@ -2106,6 +2142,100 @@ function resetStyle() {
   renderRecommend();
 }
 
+// ─── Brand Settings ──
+function showBrandSettings() {
+  const b = brandSettings;
+  let html = `<div class="modal-title" style="margin-bottom:16px">🏢 品牌设置</div>
+    <div class="form-group"><label class="form-label">公司名称</label>
+      <input class="form-input" id="b_name" value="${b.companyName||''}" placeholder="如：尚品宅配"></div>
+    <div class="form-group"><label class="form-label">联系电话</label>
+      <input class="form-input" id="b_phone" type="tel" value="${b.phone||''}" placeholder="如：13800138000"></div>
+    <div class="form-group"><label class="form-label">微信号</label>
+      <input class="form-input" id="b_wechat" value="${b.wechat||''}" placeholder="如：zhuangxiu2025"></div>
+    <div class="form-group"><label class="form-label">地址</label>
+      <input class="form-input" id="b_addr" value="${b.address||''}" placeholder="如：北京市朝阳区..."></div>
+    <button class="btn btn-primary btn-block" onclick="saveBrandSettings()">💾 保存</button>`;
+  showModal(html);
+}
+function saveBrandSettings() {
+  brandSettings.companyName = document.getElementById('b_name').value;
+  brandSettings.phone = document.getElementById('b_phone').value;
+  brandSettings.wechat = document.getElementById('b_wechat').value;
+  brandSettings.address = document.getElementById('b_addr').value;
+  saveBrand();
+  toast('品牌设置已保存 ✅');
+  hideModal();
+}
+
+// ─── Customer Management ──
+function showCustomerList() {
+  let html = `<div class="modal-title" style="margin-bottom:12px">👥 客户管理</div>
+    <button class="btn btn-primary btn-block" onclick="showCustomerForm()" style="margin-bottom:12px">＋ 添加客户</button>`;
+  if (!customers.length) {
+    html += `<div class="empty-state"><span class="emoji">👥</span><h3>还没有客户</h3><p>点击上方按钮添加第一位客户</p></div>`;
+  } else {
+    customers.forEach((c, i) => {
+      const linked = measurements.filter(m => m.customerId === c.id).length + quotes.filter(q => q.customerId === c.id).length;
+      html += `<div class="rec-card" style="margin-bottom:8px;cursor:default">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div><strong>${c.name}</strong>${c.phone?` · ${c.phone}`:''}</div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-sm btn-secondary" onclick="showCustomerForm(${i})">✏️</button>
+            <button class="btn btn-sm btn-secondary" onclick="delCustomer(${i})">🗑️</button>
+          </div>
+        </div>
+        ${c.address?`<div style="font-size:12px;color:var(--text-secondary)">${c.address}</div>`:''}
+        ${c.notes?`<div style="font-size:11px;color:var(--text-muted)">📝 ${c.notes}</div>`:''}
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">关联 ${linked} 个项目 · ${c.createdAt||''}</div>
+      </div>`;
+    });
+  }
+  html += `<button class="btn btn-secondary btn-block" onclick="hideModal()" style="margin-top:8px">返回</button>`;
+  showModal(html);
+}
+function showCustomerForm(editIdx) {
+  const isEdit = editIdx !== undefined;
+  const c = isEdit ? customers[editIdx] : { name:'', phone:'', address:'', notes:'' };
+  let html = `<div class="modal-title" style="margin-bottom:12px">${isEdit?'编辑':'添加'}客户</div>
+    <div class="form-group"><label class="form-label">姓名 *</label>
+      <input class="form-input" id="c_name" value="${c.name||''}" placeholder="如：张先生"></div>
+    <div class="form-group"><label class="form-label">电话</label>
+      <input class="form-input" id="c_phone" type="tel" value="${c.phone||''}" placeholder="如：13800138000"></div>
+    <div class="form-group"><label class="form-label">地址</label>
+      <input class="form-input" id="c_addr" value="${c.address||''}" placeholder="如：北京市朝阳区"></div>
+    <div class="form-group"><label class="form-label">备注</label>
+      <input class="form-input" id="c_notes" value="${c.notes||''}" placeholder="如：偏好原木风"></div>
+    <button class="btn btn-primary btn-block" onclick="saveCustomer(${isEdit?editIdx:-1})">💾 保存</button>`;
+  showModal(html);
+}
+function saveCustomer(editIdx) {
+  const name = document.getElementById('c_name').value.trim();
+  if (!name) { toast('请输入客户姓名'); return; }
+  const obj = {
+    id: editIdx >= 0 ? customers[editIdx].id : 'c_'+Date.now(),
+    name,
+    phone: document.getElementById('c_phone').value,
+    address: document.getElementById('c_addr').value,
+    notes: document.getElementById('c_notes').value,
+    createdAt: editIdx >= 0 ? customers[editIdx].createdAt : today(),
+  };
+  if (editIdx >= 0) customers[editIdx] = obj;
+  else customers.push(obj);
+  saveCustomers(); toast('客户已保存 ✅'); showCustomerList();
+}
+function delCustomer(i) {
+  if (!confirm(`确定删除客户 ${customers[i].name}？关联的量尺和报价记录不会删除。`)) return;
+  customers.splice(i, 1);
+  saveCustomers(); showCustomerList();
+}
+function getCustomerName(id) {
+  const c = customers.find(c => c.id === id);
+  return c ? c.name : '';
+}
+function getCustomer(id) {
+  return customers.find(c => c.id === id) || null;
+}
+
 // ═══════════════════════════════════════════
 // 11. SETTINGS
 // ═══════════════════════════════════════════
@@ -2113,6 +2243,14 @@ function resetStyle() {
 function showSettings() {
   let html = `<div class="modal-title" style="margin-bottom:16px">⚙️ 设置</div>
     <div class="settings-section">
+      <div class="settings-item" onclick="showBrandSettings()">
+        <div class="settings-item-left"><div class="settings-item-title">🏢 品牌设置</div><div class="settings-item-desc">公司名称、联系方式</div></div>
+        <span class="arrow">→</span>
+      </div>
+      <div class="settings-item" onclick="showCustomerList()">
+        <div class="settings-item-left"><div class="settings-item-title">👥 客户管理</div><div class="settings-item-desc">${customers.length} 位客户</div></div>
+        <span class="arrow">→</span>
+      </div>
       <div class="settings-item" onclick="exportData()">
         <div class="settings-item-left"><div class="settings-item-title">📤 导出数据</div><div class="settings-item-desc">下载所有数据为 JSON 文件</div></div>
         <span class="arrow">→</span>
@@ -2121,14 +2259,14 @@ function showSettings() {
         <div class="settings-item-left"><div class="settings-item-title">📥 导入数据</div><div class="settings-item-desc">从 JSON 文件恢复数据</div></div>
         <span class="arrow">→</span>
       </div>
-      <div class="settings-item" onclick="if(confirm('确定清除所有数据？收藏、量尺记录、报价历史、流程进度都会删除。')){localStorage.clear();favs.clear();measurements=[];quotes=[];wfProjects={};recResults=null;recStyle=null;recMode='discover';render();toast('已清除');hideModal();}">
+      <div class="settings-item" onclick="if(confirm('确定清除所有数据？品牌信息、客户、收藏、量尺记录、报价历史、流程进度都会删除。')){localStorage.clear();brandSettings={};customers=[];favs.clear();measurements=[];quotes=[];wfProjects={};brandSettings={};customers=[];recResults=null;recStyle=null;recMode='discover';render();toast('已清除');hideModal();}">
         <div class="settings-item-left"><div class="settings-item-title">🗑️ 清除所有数据</div><div class="settings-item-desc">重置应用到初始状态</div></div>
         <span class="arrow" style="color:var(--red)">→</span>
       </div>
     </div>
     <div class="settings-section">
       <div class="settings-item">
-        <div class="settings-item-left"><div class="settings-item-title">📐 全屋定制助手</div><div class="settings-item-desc">版本 1.0 · 专为新手设计师打造</div></div>
+        <div class="settings-item-left"><div class="settings-item-title">📐 全屋定制助手</div><div class="settings-item-desc">版本 2.0 · 专业版</div></div>
       </div>
     </div>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">`;
@@ -2141,6 +2279,8 @@ function exportData() {
     measurements,
     quotes,
     wf: wfProjects,
+    brand: brandSettings,
+    customers,
     exportedAt: new Date().toISOString()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -2163,13 +2303,185 @@ function importData(e) {
       if (data.measurements) measurements = data.measurements;
       if (data.quotes) quotes = data.quotes;
       if (data.wf) wfProjects = data.wf;
-      saveFavs(); saveMeasure(); saveQuotes(); saveWF();
+      if (data.brand) brandSettings = data.brand;
+      if (data.customers) customers = data.customers;
+      saveFavs(); saveMeasure(); saveQuotes(); saveWF(); saveBrand(); saveCustomers();
       render(); toast('数据导入成功 ✅');
       hideModal();
     } catch(e) { toast('导入失败：文件格式错误'); }
   };
   reader.readAsText(file);
   e.target.value = '';
+}
+
+// ─── Quote Image Export ──
+const QUOTE_CARD_HTML = `<div id="quoteCardExport" style="position:fixed;left:-9999px;top:0;width:480px;padding:0;font-family:'PingFang SC','Microsoft YaHei',sans-serif;background:#fff;z-index:-1">
+  <div style="background:#2d1810;color:#fff;padding:20px 24px">
+    <div style="font-size:20px;font-weight:700" id="qc_brand">全屋定制报价单</div>
+    <div style="font-size:12px;opacity:0.7;margin-top:4px" id="qc_contact"></div>
+  </div>
+  <div style="padding:20px 24px;background:#faf5f0">
+    <div style="display:flex;justify-content:space-between;align-items:center" id="qc_customer"></div>
+  </div>
+  <div style="padding:16px 24px">
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">报价详情</div>
+    <div style="font-size:15px;font-weight:600;margin-bottom:4px" id="qc_title"></div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px" id="qc_dims"></div>
+    <div id="qc_items"></div>
+    <div style="border-top:2px solid #c47040;margin-top:12px;padding-top:12px">
+      <div style="font-size:12px;color:var(--text-muted)">合计</div>
+      <div style="font-size:28px;font-weight:700;color:#c47040" id="qc_total"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px" id="qc_opts"></div>
+    </div>
+  </div>
+  <div style="padding:12px 24px;border-top:1px solid #f0e6de;font-size:10px;color:#bbb;text-align:center" id="qc_footer"></div>
+</div>`;
+
+function exportQuoteImage(i) {
+  const q = quotes[i];
+  if (!q) return toast('请先选择报价');
+  const b = brandSettings || {};
+
+  // Build card content
+  const c = q.customerId ? getCustomer(q.customerId) : null;
+  document.getElementById('qc_brand').textContent = b.companyName ? b.companyName : '全屋定制报价单';
+  document.getElementById('qc_contact').textContent = [b.phone, b.wechat].filter(Boolean).join(' · ');
+  document.getElementById('qc_customer').innerHTML = c
+    ? `<span>👤 ${c.name}${c.phone?' · '+c.phone:''}</span>${c.address?`<span style="font-size:12px;color:var(--text-muted)">${c.address}</span>`:''}`
+    : '';
+  document.getElementById('qc_title').textContent = `${q.typeLabel} · ${q.gradeLabel}`;
+  document.getElementById('qc_dims').textContent = `${q.w}×${q.h}×${q.d} mm · ${q.area} ${q.unit} · ¥${q.unitPrice}/${q.unit}`;
+
+  const itemsHtml = (q.items||[]).map(item => {
+    const pct = item.pct;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f5f0eb">
+      <span style="font-size:13px">${item.label}</span>
+      <div style="flex:1;margin:0 12px;height:6px;background:#f0e6de;border-radius:3px">
+        <div style="height:100%;width:${pct}%;background:#c47040;border-radius:3px"></div>
+      </div>
+      <span style="font-size:14px;font-weight:600">¥${fmtNum(item.val)}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('qc_items').innerHTML = itemsHtml;
+
+  document.getElementById('qc_total').textContent = `¥${fmtNum(q.total)}`;
+  document.getElementById('qc_opts').textContent = q.optsDesc ? `配件：${q.optsDesc}` : '';
+  document.getElementById('qc_footer').textContent = `由 全屋定制助手 生成 · ${today()}`;
+
+  // Inject card if not present
+  if (!document.getElementById('quoteCardExport')) {
+    const div = document.createElement('div');
+    div.innerHTML = QUOTE_CARD_HTML;
+    document.body.appendChild(div.firstElementChild);
+  }
+
+  // Wait for DOM then render
+  setTimeout(() => {
+    const el = document.getElementById('quoteCardExport');
+    if (typeof html2canvas !== 'undefined') {
+      renderWithHtml2canvas(el, i);
+    } else {
+      // Lazy load from CDN
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      s.onload = () => renderWithHtml2canvas(el, i);
+      s.onerror = () => renderFallbackCanvas(q, b, c);
+      document.head.appendChild(s);
+    }
+  }, 100);
+}
+
+function renderWithHtml2canvas(el, i) {
+  const q = quotes[i];
+  html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#fff', width: 480 })
+    .then(canvas => {
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        // Try Web Share API
+        if (navigator.share && navigator.canShare({ files: [new File([blob], '报价单.png', { type: 'image/png' })] })) {
+          navigator.share({ files: [new File([blob], '报价单.png', { type: 'image/png' })], title: '报价单' }).catch(() => {});
+        } else {
+          // Fallback: open in new tab (user can save/screenshot)
+          const w = window.open('');
+          w.document.write(`<img src="${url}" style="max-width:100%" onload="setTimeout(function(){window.location.href='${url}'},300)"><p style="font-family:sans-serif;text-align:center;color:#999;margin-top:20px">长按图片保存到相册 · 或分享给客户</p>`);
+        }
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    })
+    .catch(() => renderFallbackCanvas(q, null, null));
+}
+
+function renderFallbackCanvas(q, b, c) {
+  // Pure Canvas fallback when html2canvas fails
+  const W = 480, H = 700, RATIO = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * RATIO; canvas.height = H * RATIO;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(RATIO, RATIO);
+
+  // Background
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  // Header bar
+  ctx.fillStyle = '#2d1810'; ctx.fillRect(0, 0, W, 70);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 20px sans-serif'; ctx.fillText(b&&b.companyName?b.companyName:'全屋定制报价单', 24, 38);
+  ctx.font = '12px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  const contact = [b&&b.phone, b&&b.wechat].filter(Boolean).join(' · ');
+  if (contact) ctx.fillText(contact, 24, 58);
+
+  // Customer info
+  const cust = c;
+  if (cust) {
+    ctx.fillStyle = '#faf5f0'; ctx.fillRect(0, 70, W, 36);
+    ctx.fillStyle = '#2d1810'; ctx.font = '13px sans-serif';
+    ctx.fillText('\u{1F464} '+cust.name+(cust.phone?' · '+cust.phone:''), 24, 93);
+  }
+
+  // Content
+  let y = cust ? 130 : 110;
+  ctx.fillStyle = '#999'; ctx.font = '13px sans-serif';
+  ctx.fillText('报价详情', 24, y); y += 24;
+  ctx.fillStyle = '#2d1810'; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(q.typeLabel+' · '+q.gradeLabel, 24, y); y += 20;
+  ctx.fillStyle = '#666'; ctx.font = '13px sans-serif';
+  ctx.fillText(q.w+'×'+q.h+'×'+q.d+' mm · '+q.area+' '+q.unit+' · ¥'+q.unitPrice+'/'+q.unit, 24, y); y += 16;
+
+  // Items
+  (q.items||[]).forEach(item => {
+    y += 8;
+    ctx.fillStyle = '#2d1810'; ctx.font = '13px sans-serif';
+    ctx.fillText(item.label, 24, y);
+    ctx.fillStyle = '#2d1810'; ctx.font = 'bold 14px sans-serif';
+    const priceText = '¥'+fmtNum(item.val);
+    ctx.textAlign = 'right'; ctx.fillText(priceText, W-24, y);
+    ctx.textAlign = 'left';
+    // Bar background
+    ctx.fillStyle = '#f0e6de'; ctx.fillRect(90, y-4, 200, 6);
+    // Bar fill
+    ctx.fillStyle = '#c47040'; ctx.fillRect(90, y-4, 200*item.pct/100, 6);
+    y += 6;
+  });
+
+  // Total
+  y += 16;
+  ctx.strokeStyle = '#c47040'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(24, y); ctx.lineTo(W-24, y); ctx.stroke(); y += 12;
+  ctx.fillStyle = '#999'; ctx.font = '12px sans-serif';
+  ctx.fillText('合计', 24, y); y += 24;
+  ctx.fillStyle = '#c47040'; ctx.font = 'bold 28px sans-serif';
+  ctx.fillText('¥'+fmtNum(q.total), 24, y);
+
+  // Footer
+  ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('由 全屋定制助手 生成 · '+today(), W/2, H-20);
+
+  // Output
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const w = window.open('');
+    w.document.write(`<img src="${url}" style="max-width:100%"><p style="font-family:sans-serif;text-align:center;color:#999;margin-top:20px">长按图片保存到相册 · 或截图分享给客户</p>`);
+    URL.revokeObjectURL(url);
+  }, 'image/png');
 }
 
 // ═══════════════════════════════════════════
@@ -2188,6 +2500,24 @@ document.querySelectorAll('.tab-item').forEach(btn => {
 
 loadState();
 
+// First-run welcome
+if (!localStorage.getItem('ff_hasSeenWelcome')) {
+  setTimeout(() => {
+    showModal(`<div class="modal-title" style="margin-bottom:12px">👋 欢迎使用全屋定制助手</div>
+      <div style="margin-bottom:16px;line-height:1.7;color:var(--text-secondary)">
+        <p style="margin-bottom:8px">专为全屋定制设计师打造的现场工具：</p>
+        <p>📐 <strong>尺寸速查</strong> — 橱柜/衣柜/榻榻米等标准尺寸</p>
+        <p>📏 <strong>量尺记录</strong> — 现场量尺记下来</p>
+        <p>💰 <strong>报价速算</strong> — 快速算价格给客户</p>
+        <p>📋 <strong>设计流程</strong> — 从量尺到安装的清单</p>
+        <p>🔩 <strong>材料五金</strong> — 板材/五金百科</p>
+        <p>💡 <strong>智能推荐</strong> — AI 风格方案参考</p>
+        <p>⚙️ <strong>设置</strong> — 品牌信息、客户管理、数据导入导出</p>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="localStorage.setItem('ff_hasSeenWelcome','1');hideModal()">开始使用</button>`);
+  }, 300);
+}
+
 // Handle missing 'notes' property on material entries that use "cons" instead of "cons"
 // Fix: some material entries have "cons" with array format, some don't
 // Ensure all materials have pros and cons as arrays
@@ -2197,6 +2527,11 @@ MAT_DATA.forEach(d => {
 });
 
 switchTab('dimensions');
+
+// Service worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+}
 
 </script>
 </body>
