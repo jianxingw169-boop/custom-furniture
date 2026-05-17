@@ -414,6 +414,8 @@ body{
 .plan-images img:hover{transform:scale(1.04)}
 .img-tag{flex-shrink:0;padding:4px 10px;border-radius:6px;background:var(--clay-glint);color:var(--clay);font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;text-decoration:none;transition:background .2s;}
 .img-tag:hover{background:var(--clay-light);}
+.img-loading{position:relative;}
+.img-loading::after{content:'加载中';position:absolute;bottom:0;left:0;right:0;background:rgba(45,24,16,0.6);color:#fff;font-size:9px;text-align:center;padding:1px 0;border-radius:0 0 6px 6px;pointer-events:none;}
 
 /* ── Style Explorer ── */
 .style-search{margin:8px 0 12px;}
@@ -2082,9 +2084,7 @@ function genRefCard(spaceId, styleName, planLabel, layout, colorArr, colorNames)
 }
 
 // ─── Try loading real images from Chinese-accessible CDN ──
-function tryRealRefImg(roomType, callback) {
-  // Attempt to load from Unsplash (accessible in China via CDN)
-  const unsplashIds = {
+const unsplashIds = {
     kitchen: '1556909114-f6e7ad7d3136',
     bedroom: '1616594039964-ae9021a400a0',
     living: '1586023492125-27b2c045efd7',
@@ -2095,6 +2095,7 @@ function tryRealRefImg(roomType, callback) {
     bathroom: '1584622650111-993b4266e7a2',
     whole: '1558618666-fcd25c85f82e',
   };
+function tryRealRefImg(roomType, callback) {
   const id = unsplashIds[roomType] || unsplashIds.kitchen;
   const url = `https://images.unsplash.com/photo-${id}?w=400&h=300&fit=crop&auto=format`;
   const img = new Image();
@@ -2112,6 +2113,32 @@ function tryRealRefImg(roomType, callback) {
   setTimeout(() => { if (!img.complete) { img.src = ''; callback(null); } }, 5000);
 }
 
+// ─── Validate Unsplash photo IDs on startup ──
+const validUnsplashIds = new Set();
+function validateUnsplashIds() {
+  const ids = Object.values(unsplashIds);
+  ids.forEach(id => {
+    const img = new Image();
+    img.onload = () => validUnsplashIds.add(id);
+    img.onerror = () => {}; // leave out of valid set
+    img.src = `https://images.unsplash.com/photo-${id}?w=1&h=1&fit=crop&auto=format`;
+  });
+}
+// Patch tryRealRefImg to only use validated IDs
+const _origTryRealRefImg = tryRealRefImg;
+function _patchedTryRealRefImg(roomType, callback) {
+  const id = unsplashIds[roomType] || unsplashIds.kitchen;
+  if (validUnsplashIds.size > 0 && !validUnsplashIds.has(id)) {
+    // This ID hasn't been validated yet (or failed) - skip to avoid slow timeout
+    callback(null);
+    return;
+  }
+  // Use original
+  _origTryRealRefImg(roomType, callback);
+}
+// Swap in the patched version after a short delay for validation to start
+setTimeout(() => { tryRealRefImg = _patchedTryRealRefImg; }, 3000);
+
 const PROXY_IMG_KEY = 'ff_uploadedImgs';
 
 // ─── Background AI image loader ──
@@ -2122,6 +2149,7 @@ function bgLoadPlanImages() {
     if (!prompt) return;
     if (el.dataset.bgLoaded) return; // already tried
     el.dataset.bgLoaded = '1';
+    el.classList.add('img-loading');
     const space = el.dataset.space || '';
     const style = el.dataset.style || '';
 
@@ -2135,12 +2163,12 @@ function bgLoadPlanImages() {
       else if (lvl === 4) src = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://pollinations.ai/p/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
       else {
         // AI all failed, try Unsplash real photo
-        tryRealRefImg(space, dataURL => { if (dataURL) el.src = dataURL; });
+        tryRealRefImg(space, dataURL => { el.classList.remove('img-loading'); if (dataURL) el.src = dataURL; });
         return;
       }
       const test = new Image();
       if (lvl >= 3) test.crossOrigin = 'anonymous';
-      test.onload = () => { el.src = src; el.dataset.loaded = 'ai'; };
+      test.onload = () => { el.src = src; el.dataset.loaded = 'ai'; el.classList.remove('img-loading'); };
       test.onerror = () => { tryAI(lvl + 1); };
       test.src = src;
     };
@@ -2163,6 +2191,7 @@ function imgError(el) {
     try { if (el.dataset.cnames) cnames = JSON.parse(el.dataset.cnames); } catch(e) {}
     el.src = genRefCard(space, style, label, layout, colors, cnames);
     el.style.cssText = 'width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;cursor:pointer';
+    el.classList.add('img-loading');
     el.onclick = function(){showImg(this.src)};
     // Start background AI load
     if (el.dataset.prompt) {
@@ -2173,10 +2202,10 @@ function imgError(el) {
         if (lvl===1) src=`https://image.pollinations.ai/prompt/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
         else if (lvl===2) src=`https://pollinations.ai/p/${p}?width=400&height=300&nologo=true&seed=${Date.now()}`;
         else if (lvl===3) src=`https://corsproxy.io/?url=${encodeURIComponent('https://image.pollinations.ai/prompt/'+p+'?width=400&height=300&nologo=true&seed='+Date.now())}`;
-        else { tryRealRefImg(space, d=>{if(d)el.src=d;}); return; }
+        else { tryRealRefImg(space, d=>{el.classList.remove('img-loading');if(d)el.src=d;}); return; }
         const test=new Image();
         if(lvl>=3)test.crossOrigin='anonymous';
-        test.onload=()=>{el.src=src;el.dataset.loaded='ai';};
+        test.onload=()=>{el.src=src;el.dataset.loaded='ai';el.classList.remove('img-loading');};
         test.onerror=()=>{tryAI(lvl+1);};
         test.src=src;
       };
@@ -2245,6 +2274,9 @@ function uploadPlanImg(hash) {
 }
 
 const SPACE_DIMS = { kitchen:{w:3,l:2}, bedroom:{w:4,l:3.5}, living:{w:5,l:4}, entry:{w:1.8,l:1.5}, study:{w:3,l:2.8}, closet:{w:2.5,l:2}, whole:{w:8,l:6} };
+// Restore saved dimensions per space type
+try { const _sd = JSON.parse(localStorage.getItem('ff_spaceDims')||'{}'); Object.keys(_sd).forEach(k => { if (SPACE_DIMS[k]) SPACE_DIMS[k] = _sd[k]; }); } catch(e) {}
+function saveSpaceDims() { try { const _a = JSON.parse(localStorage.getItem('ff_spaceDims')||'{}'); _a[recSpace] = { w: recW, l: recL }; localStorage.setItem('ff_spaceDims', JSON.stringify(_a)); } catch(e) {} }
 
 // ─── State ──
 // mode: 'discover' (search/grid) | 'style' (style detail) | 'apply' (space form) | 'results'
@@ -2255,7 +2287,7 @@ let recSpace = 'kitchen';
 let recW = SPACE_DIMS[recSpace].w, recL = SPACE_DIMS[recSpace].l;
 let recGrade = 'std';
 let recResults = null;
-let refSource = 'znzmo'; // reference image search source: znzmo | xiaohongshu
+let refSource = localStorage.getItem('ff_refSource') || 'znzmo';
 function isPlanSaved(pi) { const plan=recResults[pi]; return plan?savedPlans.some(p=>p.planId===plan.id&&p.space===recSpace&&p.styleId===recStyle):false; }
 function toggleSavePlan(pi) {
   const plan = recResults[pi]; if(!plan) return;
@@ -2263,9 +2295,10 @@ function toggleSavePlan(pi) {
   if (idx>=0) { savedPlans.splice(idx,1); savePlans(); toast('已取消收藏'); }
   else {
     const s = STYLE_DB.find(x=>x.id===recStyle);
+    const refImg = genRefCard(recSpace, s?.name||'', plan.label, plan.layout, s?.colors, s?.colorNames);
     savedPlans.unshift({ id:Date.now().toString(36)+Math.random().toString(36).slice(2,6), savedAt:Date.now(),
       planId:plan.id, styleId:recStyle, styleName:s?.name||'', styleIcon:s?.icon||'',
-      space:recSpace, spaceName:REC_SPACES.find(sp=>sp.id===recSpace)?.name||'', roomW:recW, roomL:recL, plan });
+      space:recSpace, spaceName:REC_SPACES.find(sp=>sp.id===recSpace)?.name||'', roomW:recW, roomL:recL, plan, refImg });
     savePlans(); toast('方案已收藏');
   }
   renderRecommend();
@@ -2298,7 +2331,7 @@ function renderDiscover() {
     ${savedPlans.length ? `<button class="btn btn-sm btn-secondary" onclick="recMode='saved';renderRecommend()" style="margin:6px 0 4px;width:100%">📁 我的收藏 (${savedPlans.length})</button>` : ''}
     <div style="display:flex;gap:4px;margin:4px 0;font-size:11px;color:var(--text-muted);align-items:center;justify-content:center">
       <span>搜参考图:</span>
-      ${Object.entries(REF_SOURCES).map(([k,v]) => `<button class="btn btn-sm ${refSource===k?'':'btn-secondary'}" style="font-size:10px;padding:2px 8px" onclick="refSource='${k}';renderDiscover()">${v.label}</button>`).join('')}
+      ${Object.entries(REF_SOURCES).map(([k,v]) => `<button class="btn btn-sm ${refSource===k?'':'btn-secondary'}" style="font-size:10px;padding:2px 8px" onclick="refSource='${k}';localStorage.setItem('ff_refSource','${k}');renderDiscover()">${v.label}</button>`).join('')}
     </div>`;
 
   if (!items.length) {
@@ -2340,6 +2373,7 @@ function renderSavedPlans() {
     const p = sp.plan;
     html += `<div class="rec-plan-card ${p.id}" onclick="showSavedDetail(${i})">
       <div class="rec-plan-badge ${p.id}">${p.badge}</div>
+      ${sp.refImg ? `<div style="width:100%;height:100px;border-radius:6px;overflow:hidden;margin-bottom:4px"><img src="${sp.refImg}" style="width:100%;height:100%;object-fit:cover;display:block"></div>` : ''}
       <div class="rec-plan-name" style="color:${p.id==='balanced'?'var(--clay)':p.id==='economy'?'var(--green)':'#b8860b'}">${p.label}</div>
       <div class="rec-plan-desc">${p.desc} · ${sp.spaceName} ${sp.roomW}×${sp.roomL}m</div>
       <div class="rec-plan-meta"><span>🎨 ${sp.styleName}</span><span>📐 ${p.layout}</span><span>🪵 ${p.panel}</span></div>
@@ -2355,6 +2389,7 @@ function showSavedDetail(idx) {
   let html = `<div class="rec-plan-badge ${p.id}" style="margin-bottom:8px">${p.badge}</div>
     <div class="modal-title">${sp.styleIcon} ${p.label}</div>
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">${sp.styleName} · ${sp.spaceName} · ${sp.roomW}×${sp.roomL}m</div>
+    ${sp.refImg?`<div style="margin:8px 0;border-radius:10px;overflow:hidden;background:var(--cream)"><img src="${sp.refImg}" style="width:100%;display:block;cursor:pointer" onclick="showImg('${sp.refImg}')"></div>`:''}
     <div class="modal-section"><h4>📐 布局方案</h4><p>${p.layout}</p></div>
     <div class="modal-section"><h4>🏗️ 柜体配置</h4><ul>${(p.cabinets||[]).map(c=>`<li>${c}</li>`).join('')}</ul></div>
     <div class="modal-section"><h4>🧱 推荐材料</h4><p>板材：${p.panel}<br>五金：${p.hardware}<br>配色：${p.colors}</p></div>
