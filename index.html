@@ -2342,6 +2342,13 @@ function exportQuoteImage(i) {
   if (!q) return toast('请先选择报价');
   const b = brandSettings || {};
 
+  // Inject card first
+  if (!document.getElementById('quoteCardExport')) {
+    const div = document.createElement('div');
+    div.innerHTML = QUOTE_CARD_HTML;
+    document.body.appendChild(div.firstElementChild);
+  }
+
   // Build card content
   const c = q.customerId ? getCustomer(q.customerId) : null;
   document.getElementById('qc_brand').textContent = b.companyName ? b.companyName : '全屋定制报价单';
@@ -2367,13 +2374,6 @@ function exportQuoteImage(i) {
   document.getElementById('qc_total').textContent = `¥${fmtNum(q.total)}`;
   document.getElementById('qc_opts').textContent = q.optsDesc ? `配件：${q.optsDesc}` : '';
   document.getElementById('qc_footer').textContent = `由 全屋定制助手 生成 · ${today()}`;
-
-  // Inject card if not present
-  if (!document.getElementById('quoteCardExport')) {
-    const div = document.createElement('div');
-    div.innerHTML = QUOTE_CARD_HTML;
-    document.body.appendChild(div.firstElementChild);
-  }
 
   // Wait for DOM then render
   setTimeout(() => {
@@ -2403,9 +2403,15 @@ function renderWithHtml2canvas(el, i) {
         } else {
           // Fallback: open in new tab (user can save/screenshot)
           const w = window.open('');
-          w.document.write(`<img src="${url}" style="max-width:100%" onload="setTimeout(function(){window.location.href='${url}'},300)"><p style="font-family:sans-serif;text-align:center;color:#999;margin-top:20px">长按图片保存到相册 · 或分享给客户</p>`);
+          if (w) {
+            w.document.write(`<div style="text-align:center;padding:20px;font-family:sans-serif"><img src="${url}" style="max-width:100%;box-shadow:0 2px 20px rgba(0,0,0,0.1)"><p style="color:#999;margin-top:20px">长按图片保存到相册 · 或截图分享给客户</p></div>`);
+          } else {
+            // Popup blocked, try download
+            const a = document.createElement('a');
+            a.href = url; a.download = '报价单.png'; a.click();
+          }
         }
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }, 'image/png');
     })
     .catch(() => renderFallbackCanvas(q, null, null));
@@ -2479,8 +2485,13 @@ function renderFallbackCanvas(q, b, c) {
   canvas.toBlob(blob => {
     const url = URL.createObjectURL(blob);
     const w = window.open('');
-    w.document.write(`<img src="${url}" style="max-width:100%"><p style="font-family:sans-serif;text-align:center;color:#999;margin-top:20px">长按图片保存到相册 · 或截图分享给客户</p>`);
-    URL.revokeObjectURL(url);
+    if (w) {
+      w.document.write(`<div style="text-align:center;padding:20px;font-family:sans-serif"><img src="${url}" style="max-width:100%;box-shadow:0 2px 20px rgba(0,0,0,0.1)"><p style="color:#999;margin-top:20px">长按图片保存到相册 · 或截图分享给客户</p></div>`);
+    } else {
+      const a = document.createElement('a');
+      a.href = url; a.download = '报价单.png'; a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, 'image/png');
 }
 
